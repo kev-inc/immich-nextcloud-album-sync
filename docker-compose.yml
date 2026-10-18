@@ -1,0 +1,45 @@
+name: immich-nextcloud-sync
+
+services:
+  # ─────────────────────────────────────────────────────────────
+  # Multi-user orchestrator + Web UI.
+  # Wraps Salvoxia/immich-folder-album-creator for EVERY user in
+  # ./config/users.yml — each user gets their own schedule +
+  # their own Nextcloud/external-library root_path(s).
+  # UI: http://<host>:8080  (status · folders · interval · Sync-now)
+  # ─────────────────────────────────────────────────────────────
+  sync-dashboard:
+    # Prebuilt image route: on a machine without this source tree, set
+    # DASHBOARD_IMAGE to your pushed tag and run `docker compose pull && up`.
+    image: ${DASHBOARD_IMAGE:-immich-sync-dashboard:latest}
+    build: ./app
+    container_name: immich-sync-dashboard
+    restart: unless-stopped
+    ports:
+      - "${DASHBOARD_PORT:-8080}:8080"
+    environment:
+      TZ: ${TZ:-UTC}
+      IMMICH_API_URL: ${IMMICH_API_URL:-http://immich_server:2283/api}
+      NEXTCLOUD_URL: ${NEXTCLOUD_URL:-}
+      RUN_IMMEDIATELY: ${RUN_IMMEDIATELY:-false}
+    volumes:
+      - ./config/users.yml:/app/config/users.yml:ro
+      - ./data:/app/data
+      # Mounted read-write (not ro) so share-sync can write .albumprops
+      # sidecar files into shared folders. The album sync itself only reads.
+      # Paths INSIDE the container must match the ROOT_PATHs in users.yml
+      # AND the mount path used by immich-server for the same library.
+      - ${NEXTCLOUD_DATA_ROOT:-/mnt/nextcloud-data}:/external_libs:rw
+    # If your Immich is in another compose stack, attach to its network:
+    # networks:
+    #   - immich_default
+
+# Optional: prefer docker secrets over env vars? Create secrets/*.txt files
+# and add to the service above:
+# secrets:
+#   alice_api_key:
+#     file: ./secrets/alice_api_key.txt
+
+# networks:
+#   immich_default:
+#     external: true

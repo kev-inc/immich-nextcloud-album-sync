@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Immich Folder-Album Sync</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: system-ui, sans-serif; background:#0f1420; color:#e8ecf3; margin:0; }
+  header { padding:20px 28px; background:#151d31; border-bottom:1px solid #2a3757; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;}
+  h1 { font-size:20px; margin:0; }
+  .sub { color:#9fb0cc; font-size:13px; }
+  main { padding:24px 28px; max-width:1100px; margin:0 auto; }
+  .grid { display:grid; grid-template-columns: repeat(auto-fill,minmax(330px,1fr)); gap:16px; }
+  .card { background:#182136; border:1px solid #2a3757; border-radius:12px; padding:16px 18px; }
+  .card h2 { margin:0 0 8px; font-size:17px; }
+  .pill { display:inline-block; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:600; }
+  .idle{background:#2b3448;color:#c6d2e8} .running{background:#7c5a10;color:#ffe9a8}
+  .success{background:#14532d;color:#bbf7d0} .failed{background:#7f1d1d;color:#fecaca}
+  .row { font-size:13px; margin:6px 0; color:#c6d2e8;} .row b{color:#fff}
+  code { background:#0b1120; padding:2px 6px; border-radius:6px; font-size:12px; }
+  button { background:#3b82f6; border:0; color:#fff; padding:8px 14px; border-radius:8px; cursor:pointer; font-weight:600;}
+  button:hover { background:#2563eb; } button:disabled{opacity:.5}
+  pre { background:#0b1120; padding:10px; border-radius:8px; max-height:220px; overflow:auto; font-size:11.5px; }
+  .toolbar{display:flex;gap:10px;align-items:center;margin:0 0 18px;}
+  #toast{position:fixed;bottom:18px;right:18px;background:#1f2937;padding:10px 16px;border-radius:8px;display:none;}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🖼️ Immich Folder-Album Sync</h1>
+    <div class="sub">Multi-user Nextcloud → Immich album sync · API: <code>{{ api_url }}</code> · {{ now }}</div>
+  </div>
+  <div>
+    <button onclick="syncAll()">🔄 Sync all now</button>
+    <button onclick="load()" style="background:#334155">↻ Refresh status</button>
+  </div>
+</header>
+<main>
+  <div class="grid" id="grid">
+  {% for u in users %}
+    <div class="card" id="card-{{ u.username }}">
+      <h2>{{ u.username }} <span class="pill {{ u.state }}">{{ u.state }}</span></h2>
+      <div class="row">📁 Folders synced:<br>{% for f in u.folders %}<code>{{ f }}</code> {% endfor %}</div>
+      <div class="row">🔁 Mode: <b>{{ u.mode }}</b>{% if u.mode == 'UPDATE' %} <span class="sub">(create missing + prune removed/renamed)</span>{% endif %}</div>
+      <div class="row">🔗 Share sync: <b>{{ u.share_sync.state if u.share_sync else '—' }}</b> <span class="sub">{{ u.share_sync.detail if u.share_sync else '' }}</span></div>
+      <div class="row">⏱ Interval: <b>{{ u.schedule }}</b>{% if u.next_run %} · next: <b class="next">{{ u.next_run }}</b>{% endif %}</div>
+      <div class="row">🕐 Last run: <b>{{ u.last_run or '—' }}</b></div>
+      <div class="row">📊 Last result: <b>{{ u.last_result }}</b></div>
+      <div class="toolbar">
+        <button onclick="syncOne('{{ u.username }}')">Sync now</button>
+        <button onclick="showLog('{{ u.username }}')" style="background:#334155">View log</button>
+      </div>
+      <pre id="log-{{ u.username }}" style="display:none">{{ u.log_tail }}</pre>
+    </div>
+  {% endfor %}
+  </div>
+</main>
+<div id="toast"></div>
+<script>
+async function load(){
+  const r = await fetch('/api/status'); const users = await r.json();
+  // simplest: full reload keeps server-rendered values fresh
+  location.reload();
+}
+async function syncOne(name){
+  toast('Queued sync for '+name+' …');
+  await fetch('/api/sync/'+name,{method:'POST'});
+  setTimeout(load, 2500);
+}
+async function syncAll(){
+  toast('Queued sync for all users …');
+  await fetch('/api/sync-all',{method:'POST'});
+  setTimeout(load, 2500);
+}
+async function showLog(name){
+  const el = document.getElementById('log-'+name);
+  if(el.style.display==='none'){
+    const r = await fetch('/api/log/'+name); const j = await r.json();
+    el.textContent = j.log || '(empty)';
+    el.style.display='block';
+  } else el.style.display='none';
+}
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none',3000); }
+// auto-refresh every 30s
+setInterval(async ()=>{
+  try{ const r=await fetch('/api/status'); const j=await r.json();
+    j.forEach(u=>{ const c=document.querySelector('#card-'+u.username+' .pill'); if(c){c.textContent=u.state;c.className='pill '+u.state;} });
+  }catch(e){}
+}, 30000);
+</script>
+</body>
+</html>

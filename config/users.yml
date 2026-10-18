@@ -1,0 +1,47 @@
+immich_api_url: http://immich_server:2283/api
+nextcloud_url: https://cloud.example.com
+# Global defaults applied to every user unless overridden per-user
+defaults:
+  # CREATE = only create/append, never deletes.
+  # UPDATE = CREATE + prune stale albums (removed/renamed folders). Implemented as
+  #          CREATE with --sync-mode 2: deletes offline asset records (files on disk
+  #          are untouched) then deletes albums left empty. Needs Immich's external
+  #          library scan to run BEFORE the sync so deletions are detected — stale
+  #          albums converge away within 1-2 runs.
+  # CLEANUP / DELETE_ALL = destructive teardown modes, need delete_confirm: true.
+  mode: UPDATE
+  # Mirror Nextcloud folder shares into .albumprops so the matching Immich
+  # albums are shared with the same users (requires per-user app password
+  # below; needs nextcloud_url). Set false to disable for a user.
+  share_sync: true
+  album_levels: 1
+  album_separator: " "
+  sync_interval_minutes: 60   # run every hour by default
+  # cron: "0 * * * *"          # alternative to interval: use cron instead (takes precedence if set)
+  chunk_size: 2000
+  fetch_chunk_size: 1000
+  log_level: INFO
+  sync_mode: 0   # only used when mode is CREATE (UPDATE always forces 2)
+  insecure: false
+  find_assets_in_albums: false
+
+users:
+  # ── User 1: Alice — Nextcloud data folder mounted as external library ──
+  - username: alice
+    # Keys come from .env (API_KEY_ALICE, NC_APP_PASSWORD_ALICE).
+    # Alternatives: api_key: "literal" or api_key_file: /run/secrets/...
+    root_paths:
+      - /external_libs/alice_photos
+    album_levels: 1
+    sync_interval_minutes: 60
+
+  # ── User 2: Bob ──
+  - username: bob
+    # Keys come from .env (API_KEY_BOB, NC_APP_PASSWORD_BOB).
+    root_paths:
+      - /external_libs/bob_photos
+      # - /external_libs/bob_extra_photos   # multiple libraries per user supported
+    album_levels: 2
+    album_separator: " - "
+    sync_interval_minutes: 120
+    # cron: "0 */2 * * *"   # uncomment to use cron instead of interval

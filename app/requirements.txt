@@ -1,0 +1,10 @@
+flask>=3.0
+apscheduler>=3.10
+pyyaml>=6.0
+requests>=2.31
+urllib3
+regex>=2024.11.6
+tenacity>=9.2.1,<10.0.0
+# Must match your Immich server — see
+# https://github.com/timonrieger/immichpy/blob/main/COMPATIBILITY.csv
+immichpy==5.0.0
