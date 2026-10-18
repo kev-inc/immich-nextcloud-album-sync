@@ -7,10 +7,12 @@ so **multiple users/libraries** sync on independent schedules, with a dashboard 
 ## How it works
 
 - `sync-dashboard` (built from `./app`) reads `./config/users.yml`
-- For each user it schedules `immich_auto_album.py <root_path> <api_url> <api_key> --unattended …`
-  using `sync_interval_minutes` (or `cron` if set)
-- Web UI on `:8080` shows per-user state + `Sync now` buttons
-- Status persists in `./data/status.json`; last-run logs kept per user
+- One `settings:` block defines the behaviour for **everyone** (mode,
+  schedule, album options, share sync on/off)
+- The `users:` list only maps accounts to libraries: Immich `username`,
+  optional `nextcloud_user` (if the Nextcloud login differs), keys via `.env`,
+  and `root_paths`
+- Each user gets an independent scheduled job + dashboard card with manual sync
 
 ## 1. Prerequisites
 
@@ -85,7 +87,7 @@ Whichever route: adjust `.env` per host (`NEXTCLOUD_DATA_ROOT`,
 `IMMICH_API_URL`, `TZ`) — the library mount path *inside* the container must
 stay `/external_libs` to match `users.yml` and your immich-server mounts.
 
-## Sync modes (per user, `mode:` in `users.yml`)
+## Sync modes (`mode:` in the global `settings:` block — one value for everyone)
 
 No database is involved anywhere — neither upstream nor this dashboard stores state.
 The script is stateless: every run queries Immich's API for current assets/albums,
@@ -129,10 +131,12 @@ Setup per user:
    app password*.
 2. Put it in `.env` as `NC_APP_PASSWORD_<USER>` (e.g. `NC_APP_PASSWORD_ALICE`).
    Omit the line to skip share sync for that user.
-3. Set `nextcloud_url` (or `NEXTCLOUD_URL` in `.env`). Per-user `nextcloud_user`
-   defaults to the username; `nextcloud_base_path` defaults to the basename of
-   the first `root_paths` entry (e.g. `/external_libs/alice_photos` ↔ Nextcloud
-   `/alice_photos`) — set it explicitly if your layout differs, or use
+3. Set `nextcloud_url` (or `NEXTCLOUD_URL` in `.env`). If a user's Nextcloud
+   login differs from their Immich username, set `nextcloud_user:` on that
+   user block — the dashboard header shows the mapping (`alice ↔ alice.nc`).
+   `nextcloud_base_path` defaults to the basename of the first `root_paths`
+   entry (e.g. `/external_libs/alice_photos` ↔ Nextcloud `/alice_photos`) —
+   set it explicitly if your layout differs, or use
    `path_maps: [{nextcloud: ..., local: ...}]` for several mappings.
 4. The dashboard shows share-sync state per user (`🔗 Share sync` row).
 
@@ -149,21 +153,20 @@ produces coarser albums, the share lands on the parent album.
 ## 3. Adding another user
 
 1. Add to `.env`: `API_KEY_CAROL=...` (+ `NC_APP_PASSWORD_CAROL=...` for share sync)
-2. Add a block in `config/users.yml`:
+2. Append to `users:` in `config/users.yml`:
 ```yaml
   - username: carol
+    # nextcloud_user: carol.nc   # only if the Nextcloud login differs
     root_paths:
       - /external_libs/carol_photos
-    album_levels: 1
-    sync_interval_minutes: 60
 ```
 3. Ensure `/external_libs/carol_photos` exists (i.e. `$NEXTCLOUD_DATA_ROOT/carol_photos` on host)
 4. `docker compose up -d --build` (or `up -d` after `pull` on a prebuilt-image machine)
 
-Per-user options mirror the upstream script: `mode`, `album_levels`, `album_separator`,
-`chunk_size`, `fetch_chunk_size`, `sync_mode` (only applies to `mode: CREATE`;
-`UPDATE` always forces `2`), `ignore`, `path_filter`, `insecure`,
-`find_assets_in_albums`, `cron` (e.g. `"0 */2 * * *"` overrides interval).
+All behaviour (mode, schedule, album options) comes from the global
+`settings:` block — per user there is only identity, keys and folders
+(`nextcloud_user` / `nextcloud_base_path` / `path_maps` only when the
+Nextcloud side differs from the defaults).
 
 ## 4. Manual sync
 

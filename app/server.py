@@ -29,6 +29,9 @@ STATUS_FILE = DATA_DIR / "status.json"
 SCRIPT = Path(os.environ.get("SYNC_SCRIPT", "/app/immich_auto_album.py"))
 PORT = int(os.environ.get("PORT", "8080"))
 
+# Single global behaviour for all users (from the `settings:` block).
+global_settings: dict = {}
+
 app = Flask(__name__)
 sched = BackgroundScheduler(timezone=os.environ.get("TZ", "UTC"))
 status_lock = threading.Lock()
@@ -41,20 +44,21 @@ jobs_meta: dict = {}  # username -> {"interval": str, "cron": str|None}
 
 
 def load_config():
-    global users_cfg, immich_api_url, jobs_meta
+    global users_cfg, immich_api_url, jobs_meta, global_settings
     with open(CONFIG_PATH) as f:
         cfg = yaml.safe_load(f) or {}
     immich_api_url = os.environ.get(
         "IMMICH_API_URL", cfg.get("immich_api_url", "http://immich_server:2283/api")
     )
-    defaults = cfg.get("defaults", {}) or {}
+    settings = cfg.get("settings", cfg.get("defaults", {})) or {}
     # Top-level keys act as global fallbacks unless overridden per user.
-    defaults.setdefault("nextcloud_url", cfg.get("nextcloud_url", ""))
+    settings.setdefault("nextcloud_url", cfg.get("nextcloud_url", ""))
+    global_settings = settings
     for u in cfg.get("users", []) or []:
         name = u.get("username")
         if not name:
             continue
-        merged = {**defaults, **u}
+        merged = {**settings, **u}
         # resolve api key (inline or file, for docker secrets)
         api_key = merged.get("api_key") or os.environ.get(f"API_KEY_{name.upper()}")
         key_file = merged.get("api_key_file")
@@ -257,11 +261,13 @@ def run_sync(username: str, manual: bool = False) -> dict:
 
 
 def schedule_all():
-    for name, u in users_cfg.items():
-        cron_expr = u.get("cron")
-        interval = int(u.get("sync_interval_minutes", 60))
+    # One schedule for everybody (from the global settings block).
+    cron_expr = global_settings.get("cron")
+    interval = int(global_settings.get("sync_interval_minutes", 60))
+    label = f"cron `{cron_expr}`" if cron_expr else f"every {interval} min"
+    for name in users_cfg:
         jobs_meta[name] = {
-            "interval": f"every {interval} min" if not cron_expr else f"cron `{cron_expr}`",
+            "interval": label,
             "cron": cron_expr,
             "interval_minutes": interval,
         }
@@ -289,6 +295,8 @@ def status_view():
             nxt = None
         out.append({**s, "schedule": meta.get("interval", "?"),
                     "mode": str(users_cfg.get(name, {}).get("mode", "CREATE")).upper(),
+                    "nextcloud_user": str(users_cfg.get(name, {}).get("nextcloud_user")
+                                          or users_cfg.get(name, {}).get("username", "")),
                     "share_sync": s.get("share_sync", {}),
                     "cron": meta.get("cron"), "next_run": nxt,
                     "api_url": users_cfg.get(name, {}).get("_api_url", "")})

@@ -41,7 +41,7 @@
   <div class="grid" id="grid">
   {% for u in users %}
     <div class="card" id="card-{{ u.username }}">
-      <h2>{{ u.username }} <span class="pill {{ u.state }}">{{ u.state }}</span></h2>
+      <h2>{{ u.username }}{% if u.nextcloud_user != u.username %} <span class="sub">↔ {{ u.nextcloud_user }}</span>{% endif %} <span class="pill {{ u.state }}">{{ u.state }}</span></h2>
       <div class="row">📁 Folders synced:<br>{% for f in u.folders %}<code>{{ f }}</code> {% endfor %}</div>
       <div class="row">🔁 Mode: <b>{{ u.mode }}</b>{% if u.mode == 'UPDATE' %} <span class="sub">(create missing + prune removed/renamed)</span>{% endif %}</div>
       <div class="row">🔗 Share sync: <b>{{ u.share_sync.state if u.share_sync else '—' }}</b> <span class="sub">{{ u.share_sync.detail if u.share_sync else '' }}</span></div>
