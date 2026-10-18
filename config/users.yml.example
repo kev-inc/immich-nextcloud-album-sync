@@ -1,9 +1,9 @@
 immich_api_url: http://immich_server:2283/api
 nextcloud_url: https://cloud.example.com
 
-# ── Single global setting for ALL users ──
-# Everything behavioural lives here. Per-user blocks below only carry
-# identity, keys and library folders.
+# ── ADVANCED ALTERNATIVE to SYNC_* env vars ──
+# To use this file: unset SYNC_USERS and mount it at /app/config/users.yml
+# (see README). The file then takes over completely; SYNC_* vars are ignored.
 settings:
   # CREATE = only create/append, never deletes.
   # UPDATE = CREATE + prune stale albums (removed/renamed folders).
