@@ -1,9 +1,12 @@
 immich_api_url: http://immich_server:2283/api
 nextcloud_url: https://cloud.example.com
 
-# ── ADVANCED ALTERNATIVE to SYNC_* env vars ──
-# To use this file: unset SYNC_USERS and mount it at /app/config/users.yml
-# (see README). The file then takes over completely; SYNC_* vars are ignored.
+# ── Single global setting for ALL users ──
+# Everything behavioural lives here. Per-user blocks below only carry
+# identity, keys and library folders.
+# NOTE: this file holds real secrets on a live system. Placeholders are
+# committed; never commit real keys (this repo is public — keep your
+# deployment's copy out of git).
 settings:
   # CREATE = only create/append, never deletes.
   # UPDATE = CREATE + prune stale albums (removed/renamed folders).
@@ -23,17 +26,21 @@ settings:
   insecure: false
   find_assets_in_albums: false
 
-# ── Users: identity + keys + folders only ──
-# Keys come from .env: API_KEY_<USERNAME> and NC_APP_PASSWORD_<USERNAME>.
-# Alternatives per user: api_key: "literal", api_key_file: /run/secrets/...,
-# nextcloud_app_password: / nextcloud_app_password_file:.
+# ── Users: identity + keys + folders ──
+# Uncomment + paste real values. Commented-out keys = that feature is skipped
+# (no API key → sync refused with a clear error; no app password → share
+# sync skipped for that user).
 users:
-  - username: alice          # Immich account
-    # nextcloud_user: alice  # Nextcloud account, if different from username
+  - username: alice                     # Immich account
+    # api_key: "PASTE_ALICE_IMMICH_API_KEY"
+    # nextcloud_user: alice             # Nextcloud login, if different
+    # nextcloud_app_password: "PASTE_ALICE_NC_APP_PASSWORD"
     root_paths:
       - /external_libs/alice_photos
 
   - username: bob
+    # api_key: "PASTE_BOB_IMMICH_API_KEY"
     # nextcloud_user: bob
+    # nextcloud_app_password: "PASTE_BOB_NC_APP_PASSWORD"
     root_paths:
       - /external_libs/bob_photos

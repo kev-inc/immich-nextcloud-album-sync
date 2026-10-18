@@ -43,11 +43,6 @@ immich_api_url: str = ""
 jobs_meta: dict = {}  # username -> {"interval": str, "cron": str|None}
 
 
-def _env_str(name: str, default: str = "") -> str:
-    v = os.environ.get(name, default)
-    return v if isinstance(v, str) else str(v)
-
-
 def _env_user_tag(username: str) -> str:
     """Make a username safe for env var names: alice.nc -> ALICE_NC."""
     return re.sub(r"[^A-Z0-9]", "_", username.upper())
@@ -55,46 +50,8 @@ def _env_user_tag(username: str) -> str:
 
 def load_config():
     global users_cfg, immich_api_url, jobs_meta, global_settings
-    # Env-based config wins when SYNC_USERS is set; the YAML file is then
-    # ignored entirely. Otherwise fall back to config/users.yml.
-    if os.environ.get("SYNC_USERS", "").strip():
-        print("[dashboard] using env-based config (SYNC_USERS set)", flush=True)
-        immich_api_url = _env_str("IMMICH_API_URL", "http://immich_server:2283/api")
-        global_settings = {
-            "mode": _env_str("SYNC_ALBUM_MODE", "UPDATE"),
-            "share_sync": _env_str("SYNC_SHARE_SYNC", "true"),
-            "album_levels": _env_str("SYNC_ALBUM_LEVELS", "1"),
-            "album_separator": _env_str("SYNC_ALBUM_SEPARATOR", " "),
-            "sync_interval_minutes": _env_str("SYNC_SCHEDULE_MINUTES", "60"),
-            "cron": _env_str("SYNC_CRON", "") or None,
-            "chunk_size": _env_str("SYNC_CHUNK_SIZE", "2000"),
-            "fetch_chunk_size": _env_str("SYNC_FETCH_CHUNK_SIZE", "1000"),
-            "log_level": _env_str("SYNC_LOG_LEVEL", "INFO"),
-            "sync_mode": _env_str("SYNC_SYNC_MODE", "0"),
-            "insecure": _env_str("SYNC_INSECURE", "false"),
-            "find_assets_in_albums": _env_str("SYNC_FIND_ASSETS_IN_ALBUMS", "false"),
-            "nextcloud_url": _env_str("NEXTCLOUD_URL", ""),
-        }
-        for name in [u for u in re.split(r"[,\s]+", os.environ["SYNC_USERS"]) if u]:
-            U = _env_user_tag(name)
-            merged = dict(global_settings)
-            merged.update({
-                "username": name,
-                "nextcloud_user": _env_str(f"SYNC_NC_USER_{U}") or name,
-                "nextcloud_base_path": _env_str(f"SYNC_NC_BASE_PATH_{U}") or None,
-                "root_paths": [p for p in _env_str(f"SYNC_ROOT_PATHS_{U}", "").split(":") if p],
-                "api_key": _env_str(f"API_KEY_{U}", ""),
-                "api_key_file": _env_str(f"SYNC_API_KEY_FILE_{U}", "") or None,
-                "nextcloud_app_password": _env_str(f"NC_APP_PASSWORD_{U}", ""),
-                "nextcloud_app_password_file": _env_str(f"SYNC_NC_PASSWORD_FILE_{U}", "") or None,
-            })
-            _register_user(name, merged)
-        return
     if not CONFIG_PATH.exists():
-        raise FileNotFoundError(
-            f"no users configured: set SYNC_USERS env or provide {CONFIG_PATH} "
-            "(see config/users.yml.example)"
-        )
+        raise FileNotFoundError(f"config file not found: {CONFIG_PATH}")
     with open(CONFIG_PATH) as f:
         cfg = yaml.safe_load(f) or {}
     immich_api_url = os.environ.get(

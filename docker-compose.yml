@@ -4,11 +4,10 @@ services:
   # ─────────────────────────────────────────────────────────────
   # Multi-user orchestrator + Web UI.
   # Wraps Salvoxia/immich-folder-album-creator: one scheduled sync per user
-  # (their own Nextcloud/external-library root_path(s)), driven entirely by
-  # the SYNC_* variables below. No config file needed.
+  # (their own Nextcloud/external-library root_path(s)), driven by
+  # config/users.yml — settings are global, each user carries identity,
+  # keys and folders.
   # UI: http://<host>:8080  (status · folders · interval · Sync-now)
-  # Advanced alternative: unset SYNC_USERS and mount ./config/users.yml
-  # (see config/users.yml.example) — the file then takes over.
   # ─────────────────────────────────────────────────────────────
   sync-dashboard:
     # Prebuilt image route: on a machine without this source tree, set
@@ -29,24 +28,12 @@ services:
       IMMICH_API_URL: ${IMMICH_API_URL:-http://immich_server:2283/api}
       NEXTCLOUD_URL: ${NEXTCLOUD_URL:-}
       RUN_IMMEDIATELY: ${RUN_IMMEDIATELY:-false}
-      # ── Who to sync: space-separated Immich usernames ──
-      SYNC_USERS: ${SYNC_USERS:-alice bob}
-      # Library folders per user (colon-separated if several).
-      SYNC_ROOT_PATHS_ALICE: ${SYNC_ROOT_PATHS_ALICE:-/external_libs/alice_photos}
-      SYNC_ROOT_PATHS_BOB: ${SYNC_ROOT_PATHS_BOB:-/external_libs/bob_photos}
-      # Optional: Nextcloud login if different, e.g. SYNC_NC_USER_ALICE: alice.nc
-      # ── Behaviour for everyone ──
-      SYNC_ALBUM_MODE: ${SYNC_ALBUM_MODE:-UPDATE}      # UPDATE (= create + prune stale) | CREATE | CLEANUP | DELETE_ALL
-      SYNC_SCHEDULE_MINUTES: ${SYNC_SCHEDULE_MINUTES:-60}
-      # SYNC_CRON: "0 * * * *"                          # alternative to the interval above
-      SYNC_SHARE_SYNC: ${SYNC_SHARE_SYNC:-true}         # mirror Nextcloud shares onto albums
-      SYNC_ALBUM_LEVELS: ${SYNC_ALBUM_LEVELS:-1}
-      SYNC_ALBUM_SEPARATOR: ${SYNC_ALBUM_SEPARATOR:-" "}
     volumes:
+      - ./config/users.yml:/app/config/users.yml:ro
       - ./data:/app/data
       # Mounted read-write (not ro) so share-sync can write .albumprops
       # sidecar files into shared folders. The album sync itself only reads.
-      # Paths INSIDE the container must match the SYNC_ROOT_PATHS_* above
+      # Paths INSIDE the container must match the root_paths in users.yml
       # AND the mount path used by immich-server for the same library.
       - ${NEXTCLOUD_DATA_ROOT:-/mnt/nextcloud-data}:/external_libs:rw
     # If your Immich is in another compose stack, attach to its network:

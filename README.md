@@ -6,17 +6,16 @@ so **multiple users/libraries** sync on independent schedules, with a dashboard 
 
 ## How it works
 
-- `sync-dashboard` (built from `./app`) is configured entirely by `SYNC_*`
-  variables in `docker-compose.yml` — no config file needed
-- `SYNC_USERS` lists the Immich accounts; each gets an independent scheduled
-  job (`SYNC_SCHEDULE_MINUTES` or `SYNC_CRON`) over their own
-  `SYNC_ROOT_PATHS_*` libraries (typically Nextcloud data folders exposed to
-  Immich as external libraries), plus optional `SYNC_NC_USER_*` when the
-  Nextcloud login differs
+- `sync-dashboard` (built from `./app`) reads `config/users.yml`
+- One `settings:` block defines the behaviour for **everyone** (mode,
+  schedule, album options, share sync on/off)
+- The `users:` list carries the rest: Immich `username`, `api_key`,
+  optional `nextcloud_user` (if the Nextcloud login differs) and
+  `nextcloud_app_password` for share sync, plus `root_paths` libraries
+  (typically Nextcloud data folders exposed to Immich as external libraries)
+- Each user gets an independent scheduled job + dashboard card with manual sync
 - Web UI on `:8080` shows per-user state + `Sync now` buttons
 - Status persists in `./data/status.json`; last-run logs kept per user
-- Advanced alternative: unset `SYNC_USERS` and mount `config/users.yml`
-  (see `config/users.yml.example`) — the file then takes over
 
 ## 1. Prerequisites
 
@@ -32,35 +31,40 @@ Two files to fiddle with — everything else is use-as-is:
 
 ```bash
 cd immich-nextcloud-sync
-cp .env.example .env   # edit: URLs, data root, TZ, and ALL per-user keys
+cp .env.example .env   # edit: URLs, data root, TZ
 chmod 600 .env
-# edit SYNC_USERS + SYNC_ROOT_PATHS_* in docker-compose.yml if needed
+# edit config/users.yml — settings, users, keys, folders
 docker compose up -d --build
 ```
 
 Open **http://<host>:8080**
 
-(All keys live in `.env`: `API_KEY_<USER>` for Immich, `NC_APP_PASSWORD_<USER>`
-for Nextcloud share sync. Prefer docker secret files instead? Uncomment the
-`secrets:` example at the bottom of `docker-compose.yml` and use
-`SYNC_API_KEY_FILE_<USER>` / `SYNC_NC_PASSWORD_FILE_<USER>`.)
+(All keys live in `config/users.yml`: `api_key` for Immich,
+`nextcloud_app_password` for Nextcloud share sync. `API_KEY_<USER>` /
+`NC_APP_PASSWORD_<USER>` env vars in `.env` also work as fallback. Prefer
+docker secret files instead? Uncomment the `secrets:` example at the bottom
+of `docker-compose.yml` and use `api_key_file:` /
+`nextcloud_app_password_file:` in `users.yml`.)
 
 ## Run on another machine (no git clone needed)
 
 This project is just files — pick whichever transfer suits you. In all cases
-you only fiddle with **two files**: `.env` (URLs + all per-user keys) and the
-`environment:` block in `docker-compose.yml` (users, paths, behaviour).
-Never commit real keys; `chmod 600 .env` on the target.
+you only fiddle with **two files**: `config/users.yml` (settings, users,
+keys, folders) and `.env` (URLs, data root, TZ). `docker-compose.yml` is
+used as-is. Never commit real keys (this repo is public); `chmod 600` both
+files on the target if they hold secrets.
 
 **Option A — copy the folder (simplest, no registry):**
 ```bash
-# on this machine (excludes runtime data; .env is excluded — recreate it)
+# on this machine (excludes runtime data; secrets travel separately)
 tar czf immich-sync.tar.gz --exclude=data --exclude=.env \
-  -C /home/kevin/opencode immich-nextcloud-sync
-scp immich-sync.tar.gz user@other-machine:/opt/
+  --exclude=config/users.yml -C /home/kevin/opencode immich-nextcloud-sync
+# NOTE: users.yml holds real keys — copy it separately over a secure channel,
+# or re-create it from the repo template on the target.
+scp immich-sync.tar.gz config/users.yml user@other-machine:/opt/
 # on the other machine
 cd /opt && tar xzf immich-sync.tar.gz && cd immich-nextcloud-sync
-cp .env.example .env   # edit for that host, incl. all API_KEY_* keys
+cp .env.example .env   # edit for that host
 chmod 600 .env
 docker compose up -d --build
 ```
@@ -70,7 +74,7 @@ docker compose up -d --build
 # on this machine (GitHub Container Registry example)
 echo $CR_PAT | docker login ghcr.io -u <github-user> --password-stdin
 docker buildx build ./app -t ghcr.io/<user>/immich-sync-dashboard:latest --push
-# on the other machine: only docker-compose.yml + .env,
+# on the other machine: docker-compose.yml + config/users.yml + .env,
 # with DASHBOARD_IMAGE=ghcr.io/<user>/immich-sync-dashboard:latest in .env
 echo $CR_PAT | docker login ghcr.io -u <github-user> --password-stdin
 docker compose pull && docker compose up -d   # no --build, no ./app needed
@@ -82,16 +86,16 @@ docker compose pull && docker compose up -d   # no --build, no ./app needed
 docker compose build
 docker save immich-sync-dashboard:latest | gzip > dashboard-image.tar.gz
 scp dashboard-image.tar.gz docker-compose.yml user@other:/opt/sync/
-# on the other machine (needs compose file + .env alongside)
+# on the other machine (needs compose file + config/users.yml + .env alongside)
 docker load < dashboard-image.tar.gz
 docker compose up -d   # image already present, no build attempted
 ```
 
 Whichever route: adjust `.env` per host (`NEXTCLOUD_DATA_ROOT`,
 `IMMICH_API_URL`, `TZ`) — the library mount path *inside* the container must
-stay `/external_libs` to match `SYNC_ROOT_PATHS_*` and your immich-server mounts.
+stay `/external_libs` to match the `root_paths` in `users.yml` and your immich-server mounts.
 
-## Sync modes (`SYNC_ALBUM_MODE` — one value for everyone)
+## Sync modes (`mode:` in the global `settings:` block — one value for everyone)
 
 No database is involved anywhere — neither upstream nor this dashboard stores state.
 The script is stateless: every run queries Immich's API for current assets/albums,
@@ -133,15 +137,15 @@ Setup per user:
 
 1. Nextcloud → user Settings → Security → *Devices & sessions* → *Create new
    app password*.
-2. Put it in `.env` as `NC_APP_PASSWORD_<USER>` (e.g. `NC_APP_PASSWORD_ALICE`).
-   Omit the line to skip share sync for that user.
-3. Set `NEXTCLOUD_URL` in `.env`. If a user's Nextcloud login differs from
-   their Immich username, add `SYNC_NC_USER_<USER>: <login>` to the
-   `environment:` block — the dashboard header shows the mapping
-   (`alice ↔ alice.nc`). Folder mapping defaults to the basename of the
-   first root path (e.g. `/external_libs/alice_photos` ↔ Nextcloud
-   `/alice_photos`); layouts needing explicit `path_maps` are the one case
-   that still requires `config/users.yml.example` instead of env config.
+2. Paste it as `nextcloud_app_password:` in that user's block in
+   `config/users.yml` (leave commented out to skip share sync for that user).
+3. Set `nextcloud_url` in `users.yml` (or `NEXTCLOUD_URL` in `.env`). If a
+   user's Nextcloud login differs from their Immich username, set
+   `nextcloud_user:` on that user block — the dashboard header shows the
+   mapping (`alice ↔ alice.nc`). Folder mapping defaults to the basename of
+   the first root path (e.g. `/external_libs/alice_photos` ↔ Nextcloud
+   `/alice_photos`); set `nextcloud_base_path:` (or `path_maps:`) on the
+   user block if your layout differs.
 4. The dashboard shows share-sync state per user (`🔗 Share sync` row).
 
 Full share enforcement (including removals) kicks in only after share sync has
@@ -156,19 +160,20 @@ produces coarser albums, the share lands on the parent album.
 
 ## 3. Adding another user
 
-1. Add to `.env`: `API_KEY_CAROL=...` (+ `NC_APP_PASSWORD_CAROL=...` for share sync)
-2. Add two lines to the `environment:` block in `docker-compose.yml`:
+1. Add to `config/users.yml`:
 ```yaml
-      SYNC_USERS: ${SYNC_USERS:-alice bob carol}
-      SYNC_ROOT_PATHS_CAROL: ${SYNC_ROOT_PATHS_CAROL:-/external_libs/carol_photos}
-      # SYNC_NC_USER_CAROL: carol.nc   # only if the Nextcloud login differs
+  - username: carol
+    api_key: "PASTE_CAROL_KEY"
+    # nextcloud_user: carol.nc   # only if the Nextcloud login differs
+    # nextcloud_app_password: "PASTE_CAROL_NC_PASSWORD"
+    root_paths:
+      - /external_libs/carol_photos
 ```
-3. Ensure `/external_libs/carol_photos` exists (i.e. `$NEXTCLOUD_DATA_ROOT/carol_photos` on host)
-4. `docker compose up -d --build` (or `up -d` after `pull` on a prebuilt-image machine)
+2. Ensure `/external_libs/carol_photos` exists (i.e. `$NEXTCLOUD_DATA_ROOT/carol_photos` on host)
+3. `docker compose up -d --build` (or `up -d` after `pull` on a prebuilt-image machine)
 
-All behaviour (mode, schedule, album options) is global via `SYNC_*` — per user
-there is only identity, keys and folders. (Complex Nextcloud layouts needing
-`path_maps` are the one case that still needs `config/users.yml.example`.)
+All behaviour (mode, schedule, album options) is global in `settings:` — per
+user there is only identity, keys and folders.
 
 ## 4. Manual sync
 
@@ -182,8 +187,8 @@ Typical layout — Nextcloud data dir on host, one folder per user:
 
 ```
 /mnt/nextcloud-data/
-  alice_photos/      → SYNC_ROOT_PATHS_ALICE=/external_libs/alice_photos
-  bob_photos/        → SYNC_ROOT_PATHS_BOB=/external_libs/bob_photos
+  alice_photos/      → users.yml root_paths: /external_libs/alice_photos
+  bob_photos/        → users.yml root_paths: /external_libs/bob_photos
 ```
 
 Mount the **same host path** into `immich-server` (e.g. `- /mnt/nextcloud-data:/external_libs`)
