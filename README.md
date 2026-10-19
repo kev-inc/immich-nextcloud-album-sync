@@ -69,14 +69,16 @@ chmod 600 .env
 docker compose up -d --build
 ```
 
-**Option B — prebuilt image via a registry (no source needed on target):**
+**Option B — prebuilt image via GHCR (no source needed on target):**
+
+Pushing to `main` auto-builds (amd64 + arm64) and publishes
+`ghcr.io/kev-inc/immich-nextcloud-album-sync:latest` via the
+`docker-publish` workflow — no manual build step. First time only: open
+`github.com/users/kev-inc/packages`, pick the image, *Package settings →
+Change visibility → Public*, so the target can pull without logging in.
 ```bash
-# on this machine (GitHub Container Registry example)
-echo $CR_PAT | docker login ghcr.io -u <github-user> --password-stdin
-docker buildx build ./app -t ghcr.io/<user>/immich-sync-dashboard:latest --push
-# on the other machine: docker-compose.yml + config/users.yml + .env,
-# with DASHBOARD_IMAGE=ghcr.io/<user>/immich-sync-dashboard:latest in .env
-echo $CR_PAT | docker login ghcr.io -u <github-user> --password-stdin
+# on the other machine: only docker-compose.yml + config/users.yml + .env,
+# with DASHBOARD_IMAGE=ghcr.io/kev-inc/immich-nextcloud-album-sync:latest in .env
 docker compose pull && docker compose up -d   # no --build, no ./app needed
 ```
 
